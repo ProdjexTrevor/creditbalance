@@ -1,0 +1,617 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Multi-tenant core ───────────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  clients         Client[]
+  payerCategories PayerCategory[]
+  refundReasons   RefundReason[]
+  refundStatuses  RefundStatus[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  email        String
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         UserRole @default(ANALYST)
+  active       Boolean  @default(true)
+  /// Authenticator (TOTP) second factor
+  totpEnabled  Boolean  @default(false)
+  /// AES-encrypted base32 secret (empty until enrolled)
+  totpSecret   String?  @db.Text
+  /// Pending secret during setup (before confirm)
+  totpPendingSecret String? @db.Text
+  /// Hashed one-time backup codes (JSON string array of bcrypt hashes)
+  totpBackupCodes Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientAccess UserClientAccess[]
+  ruleRuns     RuleRun[]
+  importBatches ImportBatch[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  CLIENT_ADMIN
+  ANALYST
+  VIEWER
+}
+
+/// Facility / referral database under a tenant (was ReferralDatabase)
+model Client {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  code      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userAccess       UserClientAccess[]
+  payerMaps        ClientPayerMap[]
+  accountMaps      ClientAccountMap[]
+  valueLists       RuleValueList[]
+  rulePacks        RulePack[]
+  accounts         Account[]
+  queues           WorkQueue[]
+  schedules        RuleSchedule[]
+  refundReasons    ClientRefundReason[]
+  importBatches    ImportBatch[]
+  epicConnection   ClientEpicConnection?
+  epicSyncRuns     EpicSyncRun[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model UserClientAccess {
+  id       String @id @default(cuid())
+  userId   String
+  clientId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+}
+
+// ─── Catalog: reasons, statuses, payer categories ────────────────────────────
+
+model RefundReason {
+  id          String  @id @default(cuid())
+  tenantId    String
+  code        Int
+  name        String
+  description String? @db.Text
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rules       Rule[]
+  queues      WorkQueue[]
+  accounts    Account[]
+  runAccounts RuleRunAccount[]
+  clients     ClientRefundReason[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+/// Which refund reasons are enabled for a client (queues / rule targets)
+model ClientRefundReason {
+  id             String   @id @default(cuid())
+  clientId       String
+  refundReasonId String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  refundReason RefundReason @relation(fields: [refundReasonId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, refundReasonId])
+  @@index([clientId])
+}
+
+model RefundStatus {
+  id        String  @id @default(cuid())
+  tenantId  String
+  code      Int
+  name      String
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  accounts Account[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model PayerCategory {
+  id          String  @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  active      Boolean @default(true)
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payerMaps ClientPayerMap[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+// ─── Per-client mapping ──────────────────────────────────────────────────────
+
+model ClientPayerMap {
+  id              String  @id @default(cuid())
+  clientId        String
+  sourcePlanCode  String?
+  sourcePlanName  String?
+  payerCategoryId String
+  notes           String?
+  active          Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  payerCategory PayerCategory @relation(fields: [payerCategoryId], references: [id])
+
+  @@index([clientId])
+  @@index([clientId, sourcePlanCode])
+}
+
+model ClientAccountMap {
+  id               String   @id @default(cuid())
+  clientId         String
+  sourceAccountKey String
+  accountId        String?
+  tag              String?
+  excluded         Boolean  @default(false)
+  notes            String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  client  Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  account Account? @relation(fields: [accountId], references: [id])
+
+  @@unique([clientId, sourceAccountKey])
+  @@index([clientId])
+}
+
+// ─── Operational account workbench data (simplified ReferralData) ────────────
+
+model Account {
+  id                   String    @id @default(cuid())
+  clientId             String
+  patientId            String
+  /// Source account number display
+  accountNumber        String
+  firstName            String?
+  lastName             String?
+  medicalRecordNumber  String?
+  location             String?
+  admitDate            DateTime?
+  dischargeDate        DateTime?
+  patientType          String?
+  primaryInsurance     String?
+  secondaryInsurance   String?
+  tertiaryInsurance    String?
+  planCode1            String?
+  planCode2            String?
+  planCode3            String?
+  totalBilledCharges   Decimal   @default(0) @db.Decimal(14, 2)
+  patientAccountBalance Decimal  @default(0) @db.Decimal(14, 2)
+  totalNetPmts         Decimal   @default(0) @db.Decimal(14, 2)
+  netAdminOtherAdj     Decimal   @default(0) @db.Decimal(14, 2)
+  netContractualAdj    Decimal   @default(0) @db.Decimal(14, 2)
+  netPgp               Decimal   @default(0) @db.Decimal(14, 2)
+  eraCharges           Decimal   @default(0) @db.Decimal(14, 2)
+  eraTotal             Decimal   @default(0) @db.Decimal(14, 2)
+  ptRepEra             Decimal   @default(0) @db.Decimal(14, 2)
+  netSecondaryPayment  Decimal   @default(0) @db.Decimal(14, 2)
+  charityWo            Decimal   @default(0) @db.Decimal(14, 2)
+  refundReasonId       String?
+  refundStatusId       String?
+  fileDate             DateTime?
+  /// Epic FHIR linkage (when synced from Epic)
+  epicPatientFhirId    String?
+  epicAccountFhirId    String?
+  lastEpicSyncAt       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  refundReason RefundReason?      @relation(fields: [refundReasonId], references: [id])
+  refundStatus RefundStatus?      @relation(fields: [refundStatusId], references: [id])
+  accountMaps  ClientAccountMap[]
+  notes        AccountNote[]
+  history      ChangeHistory[]
+  runMatches   RuleRunAccount[]
+  transactions Transaction[]
+
+  @@unique([clientId, patientId])
+  @@index([clientId])
+  @@index([clientId, refundReasonId])
+  @@index([clientId, refundStatusId])
+  @@index([clientId, epicPatientFhirId])
+}
+
+/// Per-client Epic FHIR (SMART Backend Services) connection
+model ClientEpicConnection {
+  id              String          @id @default(cuid())
+  clientId        String          @unique
+  enabled         Boolean         @default(false)
+  environment     EpicEnvironment @default(SANDBOX)
+  /// FHIR R4 base, e.g. https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/
+  fhirBaseUrl     String
+  /// OAuth token endpoint (defaults from SMART discovery if empty)
+  tokenUrl        String?
+  /// Epic-registered client id (NONPROD or PROD)
+  epicClientId    String
+  /// Encrypted RSA private key PEM (backend JWT assertion)
+  privateKeyEnc   String?         @db.Text
+  jwkKeyId        String?
+  /// Default MRN identifier system OID for Patient search
+  mrnSystem       String?
+  scopes          String          @default("system/Patient.read system/Coverage.read system/Account.read")
+  lastTokenAt     DateTime?
+  lastError       String?         @db.Text
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+enum EpicEnvironment {
+  SANDBOX
+  PRODUCTION
+}
+
+model EpicSyncRun {
+  id           String   @id @default(cuid())
+  clientId     String
+  userId       String?
+  mode         String   @default("DRY_RUN")
+  status       String   @default("COMPLETED")
+  query        String?
+  matchedCount Int      @default(0)
+  syncedCount  Int      @default(0)
+  errorCount   Int      @default(0)
+  errorsJson   Json?
+  createdAt    DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+}
+
+model Transaction {
+  id                     String            @id @default(cuid())
+  accountId              String
+  /// EHR host transactions vs 835 remittance transactions
+  source                 TransactionSource @default(EHR)
+  planCode               String?
+  planName               String?
+  postingCode            String?
+  postingDate            DateTime?
+  postingAmount          Decimal           @default(0) @db.Decimal(14, 2)
+  transactionDescription String?
+  /// Normalized type: Charge | Payment | Adjustment | Transfer | Other
+  transactionType        String?
+  receiptIdentification  String?
+  /// 835-specific
+  payerClaimControlNumber String?
+  claimAdjustmentGroupCode String?
+  claimStatusCode        Int?
+  /// Optional precomputed running total (chronological); also computed client-side
+  runningTotal           Decimal?          @db.Decimal(14, 2)
+  sortOrder              Int               @default(0)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([accountId, source])
+}
+
+enum TransactionSource {
+  EHR
+  ERA_835
+}
+
+model AccountNote {
+  id        String   @id @default(cuid())
+  accountId String
+  userId    String?
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model ChangeHistory {
+  id               String   @id @default(cuid())
+  accountId        String
+  userId           String?
+  refundReasonId   String?
+  refundStatusId   String?
+  adjustmentAmount Decimal? @db.Decimal(14, 2)
+  source           String   @default("user")
+  note             String?
+  createdAt        DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+// ─── Rules engine ────────────────────────────────────────────────────────────
+
+/// Ordered hierarchy container per client
+model RulePack {
+  id          String   @id @default(cuid())
+  clientId    String
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  rules     Rule[]
+  schedules RuleSchedule[]
+  runs      RuleRun[]
+
+  @@index([clientId])
+}
+
+model Rule {
+  id                  String   @id @default(cuid())
+  rulePackId          String
+  name                String
+  description         String?  @db.Text
+  /// Hierarchy position: lower number = higher priority (evaluated first)
+  hierarchyRank       Int
+  enabled             Boolean  @default(true)
+  /// Only match accounts that do not already have a refund reason
+  onlyUnclassified    Boolean  @default(true)
+  targetRefundReasonId String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  rulePack           RulePack            @relation(fields: [rulePackId], references: [id], onDelete: Cascade)
+  targetRefundReason RefundReason        @relation(fields: [targetRefundReasonId], references: [id])
+  conditionGroups    RuleConditionGroup[]
+  runAccounts        RuleRunAccount[]
+
+  @@unique([rulePackId, hierarchyRank])
+  @@index([rulePackId])
+}
+
+model RuleConditionGroup {
+  id       String @id @default(cuid())
+  ruleId   String
+  /// Groups are AND'ed together
+  sortOrder Int   @default(0)
+
+  rule       Rule            @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  conditions RuleCondition[]
+
+  @@index([ruleId])
+}
+
+enum RuleOperator {
+  EQ
+  NEQ
+  GT
+  GTE
+  LT
+  LTE
+  IS_NULL
+  IS_NOT_NULL
+  LIKE
+  IN
+  NOT_IN
+  ABS_GT
+  ABS_GTE
+  ABS_LT
+  ABS_LTE
+  ABS_EQ
+  /// |field| compared to |otherField|
+  ABS_EQ_FIELD
+  ABS_GT_FIELD
+  ABS_GTE_FIELD
+  GT_FIELD
+  GTE_FIELD
+  LT_FIELD
+  LTE_FIELD
+  EQ_FIELD
+}
+
+/// Allowlisted account columns only — enforced in compiler
+model RuleCondition {
+  id            String       @id @default(cuid())
+  groupId       String
+  field         String
+  operator      RuleOperator
+  /// Literal value(s) as JSON: number | string | string[] | null
+  valueJson     Json?
+  /// Compare to another allowlisted field
+  otherField    String?
+  /// Optional named value list (plan codes, etc.)
+  valueListId   String?
+  sortOrder     Int          @default(0)
+
+  group     RuleConditionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  valueList RuleValueList?     @relation(fields: [valueListId], references: [id])
+
+  @@index([groupId])
+}
+
+model RuleValueList {
+  id          String   @id @default(cuid())
+  clientId    String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client     Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  items      RuleValueListItem[]
+  conditions RuleCondition[]
+
+  @@unique([clientId, name])
+  @@index([clientId])
+}
+
+model RuleValueListItem {
+  id     String @id @default(cuid())
+  listId String
+  value  String
+
+  list RuleValueList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@index([listId])
+  @@unique([listId, value])
+}
+
+model RuleSchedule {
+  id           String    @id @default(cuid())
+  clientId     String
+  rulePackId   String
+  name         String
+  /// cron expression, e.g. "0 2 * * *"
+  cron         String
+  timezone     String    @default("America/Chicago")
+  enabled      Boolean   @default(true)
+  lastRunAt    DateTime?
+  nextRunAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  client   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  rulePack RulePack @relation(fields: [rulePackId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([enabled])
+}
+
+model RuleRun {
+  id              String        @id @default(cuid())
+  rulePackId      String
+  triggeredById   String?
+  mode            RuleRunMode   @default(DRY_RUN)
+  status          RuleRunStatus @default(PENDING)
+  matchedCount    Int           @default(0)
+  appliedCount    Int           @default(0)
+  errorMessage    String?       @db.Text
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime      @default(now())
+
+  rulePack    RulePack         @relation(fields: [rulePackId], references: [id], onDelete: Cascade)
+  triggeredBy User?            @relation(fields: [triggeredById], references: [id])
+  accounts    RuleRunAccount[]
+
+  @@index([rulePackId])
+}
+
+enum RuleRunMode {
+  DRY_RUN
+  APPLY
+}
+
+enum RuleRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model RuleRunAccount {
+  id                 String  @id @default(cuid())
+  ruleRunId          String
+  accountId          String
+  matchedRuleId      String
+  reasonBeforeId     String?
+  reasonAfterId      String
+  applied            Boolean @default(false)
+
+  ruleRun      RuleRun      @relation(fields: [ruleRunId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  matchedRule  Rule         @relation(fields: [matchedRuleId], references: [id])
+  reasonAfter  RefundReason @relation(fields: [reasonAfterId], references: [id])
+
+  @@index([ruleRunId])
+  @@index([accountId])
+}
+
+model WorkQueue {
+  id             String  @id @default(cuid())
+  clientId       String
+  name           String
+  description    String?
+  refundReasonId String
+  active         Boolean @default(true)
+
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  refundReason RefundReason @relation(fields: [refundReasonId], references: [id])
+
+  @@unique([clientId, refundReasonId])
+  @@index([clientId])
+}
+
+/// Bulk account load history (CSV / ReferralData-shaped)
+model ImportBatch {
+  id            String           @id @default(cuid())
+  clientId      String
+  userId        String?
+  kind          String           @default("ACCOUNTS")
+  fileName      String?
+  mode          RuleRunMode      @default(DRY_RUN)
+  status        String           @default("COMPLETED")
+  rowCount      Int              @default(0)
+  createdCount  Int              @default(0)
+  updatedCount  Int              @default(0)
+  skippedCount  Int              @default(0)
+  errorCount    Int              @default(0)
+  /// Sample errors: [{ row, message }]
+  errorsJson    Json?
+  createdAt     DateTime         @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([clientId, createdAt])
+}

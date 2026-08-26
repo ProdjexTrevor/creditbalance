@@ -1,0 +1,20 @@
+{
+  "name": "credit-balance",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm --filter api test",
+    "test:watch": "pnpm --filter api test:watch",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter api prisma:generate",
+    "db:push": "pnpm --filter api db:push",
+    "db:seed": "pnpm --filter api db:seed",
+    "db:reset-mock": "pnpm --filter api db:reset-mock",
+    "db:setup": "pnpm db:up && pnpm db:push && pnpm db:seed"
+  }
+}

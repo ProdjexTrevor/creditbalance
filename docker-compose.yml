@@ -1,0 +1,22 @@
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-password}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-credit_balance}
+      MARIADB_USER: ${MARIADB_USER:-credit}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-password}
+    ports:
+      # Bind to localhost only — not exposed on the LAN
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - cb_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  cb_db_data:

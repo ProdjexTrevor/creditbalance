@@ -1,0 +1,6 @@
+Host Patient Key,Facility Acct #,Pt First Name,Pt Last Name,Campus,IP/OP,Prim Plan Name,Prim Plan Code,Sec Plan Name,Sec Plan Code,Total $ Charges,Credit Balance Amt,Patient Cash Applied,Admin Adj Amt,Contractual Adj Amt,ERA Charge Total,Charity WO Amt,Extra Source Note
+HP-10001,ACCT-88001,Maria,Lopez,MAIN,I,MEDICAID PLAN ALPHA,C95,,,2450.00,"(185.50)",-62.00,0,-980.00,2400.00,0,Demo row - map Host Patient Key to Patient ID
+HP-10002,ACCT-88002,James,Nguyen,MAIN,O,MEDICARE PART A SAMPLE,N90,COMMERCIAL BLUE SAMPLE,COMM1,"1,100.25",-95.00,-40.50,0,-320.00,1050.00,0,Second insurance present - map Sec Plan Code to planCode2
+HP-10003,ACCT-88003,Aisha,Patel,NORTH,I,COMMERCIAL AETNA SAMPLE,COMM2,,,875.00,-120.00,0,-25.00,-200.00,800.00,0,COMM2 often unmapped - good for payer map coverage
+HP-10004,ACCT-88004,Robert,Chen,EAST,O,SELF PAY SAMPLE,SELF,,,310.75,-48.00,-48.00,0,0,0,0,Self pay patient payments
+HP-10005,ACCT-88005,Sofia,Martinez,MAIN,I,CHARITY CARE SAMPLE,CHAR,,,5000.00,-200.00,0,0,0,0,"5,000.00",Full charity write-off demo
