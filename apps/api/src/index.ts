@@ -2,10 +2,11 @@ import "dotenv/config";
 import "express-async-errors";
 import express from "express";
 import cors from "cors";
-import helmet from "helmet";
+import helmetImport from "helmet";
 import morgan from "morgan";
-import rateLimit from "express-rate-limit";
+import rateLimitImport from "express-rate-limit";
 import { assertSafeEnv, isProduction } from "./lib/env.js";
+import { esmDefaultFn } from "./lib/esmImport.js";
 import { authRouter } from "./routes/auth.js";
 import { tenantsRouter } from "./routes/tenants.js";
 import { clientsRouter } from "./routes/clients.js";
@@ -21,6 +22,9 @@ import { requireAuth } from "./middleware/auth.js";
 import { startScheduler } from "./jobs/scheduler.js";
 
 assertSafeEnv();
+
+const helmet = esmDefaultFn(helmetImport);
+const rateLimit = esmDefaultFn(rateLimitImport);
 
 const app = express();
 const origin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
