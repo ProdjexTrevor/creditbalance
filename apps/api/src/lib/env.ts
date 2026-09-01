@@ -7,6 +7,8 @@ const WEAK = new Set([
   "",
   "dev-secret",
   "dev-secret-change-me",
+  "dev-secret-local-only-do-not-use",
+  "dev-enc-local-only-do-not-use",
   "change-me",
   "change-me-in-production",
   "change-me-totp",
@@ -24,7 +26,11 @@ export function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-/** Call once at process start before accepting traffic. */
+export function isVercelRuntime(): boolean {
+  return process.env.VERCEL === "1" || Boolean(process.env.VERCEL);
+}
+
+/** Throws if secrets are missing/weak. Does not call process.exit (safe for serverless). */
 export function assertSafeEnv(): void {
   const jwt = process.env.JWT_SECRET;
   const enc =
@@ -54,7 +60,12 @@ export function assertSafeEnv(): void {
 
   if (problems.length === 0) return;
 
+  const message = problems.join("; ");
+
   if (isProduction() || process.env.STRICT_SECRETS === "1") {
+    if (isVercelRuntime()) {
+      throw new Error(message);
+    }
     console.error("Refusing to start — insecure configuration:");
     for (const p of problems) console.error(`  • ${p}`);
     process.exit(1);

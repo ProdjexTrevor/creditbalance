@@ -2,11 +2,10 @@ import "dotenv/config";
 import "express-async-errors";
 import express from "express";
 import cors from "cors";
-import helmetImport from "helmet";
+import helmet from "helmet";
 import morgan from "morgan";
-import rateLimitImport from "express-rate-limit";
-import { assertSafeEnv, isProduction } from "./lib/env.js";
-import { esmDefaultFn } from "./lib/esmImport.js";
+import rateLimit from "express-rate-limit";
+import { assertSafeEnv, isProduction, isVercelRuntime } from "./lib/env.js";
 import { authRouter } from "./routes/auth.js";
 import { tenantsRouter } from "./routes/tenants.js";
 import { clientsRouter } from "./routes/clients.js";
@@ -21,10 +20,10 @@ import { epicRouter } from "./routes/epic.js";
 import { requireAuth } from "./middleware/auth.js";
 import { startScheduler } from "./jobs/scheduler.js";
 
-assertSafeEnv();
-
-const helmet = esmDefaultFn(helmetImport);
-const rateLimit = esmDefaultFn(rateLimitImport);
+/** Validate secrets at runtime (skipped during Vercel build analysis). */
+if (!process.env.VERCEL) {
+  assertSafeEnv();
+}
 
 const app = express();
 const origin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
@@ -32,7 +31,7 @@ const origin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 app.disable("x-powered-by");
 app.use(
   helmet({
-    contentSecurityPolicy: false, // API-only; CSP belongs on the web app
+    contentSecurityPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
@@ -51,7 +50,39 @@ const authLimiter = rateLimit({
   message: { error: "Too many attempts. Try again later." },
 });
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    env: isVercelRuntime() ? "vercel" : "node",
+  });
+});
+
+/** Fail fast on Vercel when required secrets are missing (health still works). */
+let vercelEnvOk: boolean | null = null;
+app.use((req, res, next) => {
+  if (req.path === "/health") return next();
+  if (isVercelRuntime() && isProduction()) {
+    if (vercelEnvOk === null) {
+      try {
+        assertSafeEnv();
+        vercelEnvOk = true;
+      } catch (e) {
+        vercelEnvOk = false;
+        return res.status(503).json({
+          error:
+            e instanceof Error
+              ? e.message
+              : "Server misconfigured — set JWT_SECRET and TOTP_ENCRYPTION_KEY in Vercel",
+        });
+      }
+    } else if (vercelEnvOk === false) {
+      return res.status(503).json({
+        error: "Server misconfigured — set JWT_SECRET and TOTP_ENCRYPTION_KEY in Vercel",
+      });
+    }
+  }
+  next();
+});
 
 app.use("/auth/login", authLimiter);
 app.use("/auth/login/2fa", authLimiter);
@@ -96,8 +127,8 @@ const port = process.env.PORT ? Number(process.env.PORT) : 3010;
 
 export default app;
 
-/** Local / long-running server (Docker, Render, etc.) */
-if (!process.env.VERCEL) {
+if (!isVercelRuntime()) {
+  assertSafeEnv();
   app.listen(port, () => {
     console.log(`API listening on http://localhost:${port}`);
     startScheduler();
