@@ -90,7 +90,12 @@ app.use(
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3010;
 
-app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
-  startScheduler();
-});
+export default app;
+
+/** Local / long-running server (Docker, Render, etc.) */
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`API listening on http://localhost:${port}`);
+    startScheduler();
+  });
+}
