@@ -1,16 +1,38 @@
 #!/usr/bin/env node
 /**
- * Vercel build — generate Prisma client only.
- * Vercel's Express preset bundles src/index.ts; we do NOT run tsc here.
+ * Vercel build for pnpm monorepo (Root Directory = apps/api).
  */
 import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL =
-    "mysql://build:build@127.0.0.1:3306/credit_balance_build";
+const apiDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = join(apiDir, "..", "..");
+const monorepo = existsSync(join(repoRoot, "pnpm-lock.yaml"));
+
+process.env.DATABASE_URL ??=
+  "mysql://build:build@127.0.0.1:3306/credit_balance_build";
+
+function run(cmd, cwd) {
+  console.log(`→ ${cmd}`);
+  execSync(cmd, { cwd, stdio: "inherit", env: process.env });
 }
 
-console.log("→ prisma generate");
-execSync("pnpm exec prisma generate", { stdio: "inherit" });
+function hasNodeModules(dir) {
+  return existsSync(join(dir, "node_modules"));
+}
+
+if (monorepo) {
+  if (!hasNodeModules(repoRoot)) {
+    run("pnpm install --no-frozen-lockfile", repoRoot);
+  }
+  run("pnpm --filter api exec prisma generate", repoRoot);
+} else {
+  if (!hasNodeModules(apiDir)) {
+    run("pnpm install --no-frozen-lockfile", apiDir);
+  }
+  run("pnpm exec prisma generate", apiDir);
+}
 
 console.log("→ vercel-build complete");
