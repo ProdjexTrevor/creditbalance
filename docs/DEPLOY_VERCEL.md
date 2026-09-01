@@ -1,5 +1,7 @@
 # Deploy to Vercel (API)
 
+Do **not** deploy via `vercel` CLI from `apps/api` alone — that uploads only 98 files without the monorepo lockfile. Use **GitHub integration** (recommended) or deploy from the connected repo.
+
 ## Vercel project settings
 
 | Setting | Value |
