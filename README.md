@@ -38,6 +38,21 @@ pnpm dev
 - API: http://localhost:3010  
 - DB: `localhost:3307` (user `credit` / `password`, database `credit_balance`)
 
+## Deploy API to Vercel
+
+**Recommended settings** (Vercel project → Settings → General):
+
+| Setting | Value |
+|---------|--------|
+| Root Directory | *(leave empty — repo root)* |
+| Framework Preset | Express |
+| Build Command | `pnpm --filter api vercel-build` |
+| Install Command | `pnpm install --frozen-lockfile` |
+
+Or set **Root Directory** to `apps/api` and redeploy from latest `main` (uses `apps/api/vercel.json`).
+
+**Required environment variables:** `DATABASE_URL`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `WEB_ORIGIN` (hosted MySQL/MariaDB — not localhost).
+
 ### Demo login
 
 | Tenant | Email | Password | Role |
