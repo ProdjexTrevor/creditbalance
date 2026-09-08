@@ -22,6 +22,8 @@ model Tenant {
   payerCategories PayerCategory[]
   refundReasons   RefundReason[]
   refundStatuses  RefundStatus[]
+
+  @@map("APP_Tenant")
 }
 
 model User {
@@ -51,6 +53,8 @@ model User {
 
   @@unique([tenantId, email])
   @@index([tenantId])
+
+  @@map("APP_User")
 }
 
 enum UserRole {
@@ -87,6 +91,8 @@ model Client {
 
   @@unique([tenantId, code])
   @@index([tenantId])
+
+  @@map("APP_Client")
 }
 
 model UserClientAccess {
@@ -98,6 +104,8 @@ model UserClientAccess {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientId])
+
+  @@map("APP_UserClientAccess")
 }
 
 // ─── Catalog: reasons, statuses, payer categories ────────────────────────────
@@ -120,6 +128,8 @@ model RefundReason {
 
   @@unique([tenantId, code])
   @@index([tenantId])
+
+  @@map("APP_RefundReason")
 }
 
 /// Which refund reasons are enabled for a client (queues / rule targets)
@@ -135,6 +145,8 @@ model ClientRefundReason {
 
   @@unique([clientId, refundReasonId])
   @@index([clientId])
+
+  @@map("APP_ClientRefundReason")
 }
 
 model RefundStatus {
@@ -150,6 +162,8 @@ model RefundStatus {
 
   @@unique([tenantId, code])
   @@index([tenantId])
+
+  @@map("APP_RefundStatus")
 }
 
 model PayerCategory {
@@ -165,6 +179,8 @@ model PayerCategory {
 
   @@unique([tenantId, code])
   @@index([tenantId])
+
+  @@map("APP_PayerCategory")
 }
 
 // ─── Per-client mapping ──────────────────────────────────────────────────────
@@ -185,6 +201,8 @@ model ClientPayerMap {
 
   @@index([clientId])
   @@index([clientId, sourcePlanCode])
+
+  @@map("APP_ClientPayerMap")
 }
 
 model ClientAccountMap {
@@ -204,6 +222,8 @@ model ClientAccountMap {
 
   @@unique([clientId, sourceAccountKey])
   @@index([clientId])
+
+  @@map("APP_ClientAccountMap")
 }
 
 // ─── Operational account workbench data (simplified ReferralData) ────────────
@@ -262,6 +282,8 @@ model Account {
   @@index([clientId, refundReasonId])
   @@index([clientId, refundStatusId])
   @@index([clientId, epicPatientFhirId])
+
+  @@map("APP_Account")
 }
 
 /// Per-client Epic FHIR (SMART Backend Services) connection
@@ -288,6 +310,8 @@ model ClientEpicConnection {
   updatedAt       DateTime        @updatedAt
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("APP_ClientEpicConnection")
 }
 
 enum EpicEnvironment {
@@ -311,6 +335,8 @@ model EpicSyncRun {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId, createdAt])
+
+  @@map("APP_EpicSyncRun")
 }
 
 model Transaction {
@@ -339,6 +365,8 @@ model Transaction {
 
   @@index([accountId])
   @@index([accountId, source])
+
+  @@map("APP_Transaction")
 }
 
 enum TransactionSource {
@@ -356,6 +384,8 @@ model AccountNote {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+
+  @@map("APP_AccountNote")
 }
 
 model ChangeHistory {
@@ -372,6 +402,8 @@ model ChangeHistory {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+
+  @@map("APP_ChangeHistory")
 }
 
 // ─── Rules engine ────────────────────────────────────────────────────────────
@@ -392,6 +424,8 @@ model RulePack {
   runs      RuleRun[]
 
   @@index([clientId])
+
+  @@map("APP_RulePack")
 }
 
 model Rule {
@@ -415,6 +449,8 @@ model Rule {
 
   @@unique([rulePackId, hierarchyRank])
   @@index([rulePackId])
+
+  @@map("APP_Rule")
 }
 
 model RuleConditionGroup {
@@ -427,6 +463,8 @@ model RuleConditionGroup {
   conditions RuleCondition[]
 
   @@index([ruleId])
+
+  @@map("APP_RuleConditionGroup")
 }
 
 enum RuleOperator {
@@ -475,6 +513,8 @@ model RuleCondition {
   valueList RuleValueList?     @relation(fields: [valueListId], references: [id])
 
   @@index([groupId])
+
+  @@map("APP_RuleCondition")
 }
 
 model RuleValueList {
@@ -491,6 +531,8 @@ model RuleValueList {
 
   @@unique([clientId, name])
   @@index([clientId])
+
+  @@map("APP_RuleValueList")
 }
 
 model RuleValueListItem {
@@ -502,6 +544,8 @@ model RuleValueListItem {
 
   @@index([listId])
   @@unique([listId, value])
+
+  @@map("APP_RuleValueListItem")
 }
 
 model RuleSchedule {
@@ -523,6 +567,8 @@ model RuleSchedule {
 
   @@index([clientId])
   @@index([enabled])
+
+  @@map("APP_RuleSchedule")
 }
 
 model RuleRun {
@@ -543,6 +589,8 @@ model RuleRun {
   accounts    RuleRunAccount[]
 
   @@index([rulePackId])
+
+  @@map("APP_RuleRun")
 }
 
 enum RuleRunMode {
@@ -574,6 +622,8 @@ model RuleRunAccount {
 
   @@index([ruleRunId])
   @@index([accountId])
+
+  @@map("APP_RuleRunAccount")
 }
 
 model WorkQueue {
@@ -589,6 +639,8 @@ model WorkQueue {
 
   @@unique([clientId, refundReasonId])
   @@index([clientId])
+
+  @@map("APP_WorkQueue")
 }
 
 /// Bulk account load history (CSV / ReferralData-shaped)
@@ -614,4 +666,6 @@ model ImportBatch {
 
   @@index([clientId])
   @@index([clientId, createdAt])
+
+  @@map("APP_ImportBatch")
 }
