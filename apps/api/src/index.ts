@@ -32,8 +32,21 @@ if (!process.env.VERCEL) {
 }
 
 const app = express();
-const origin =
+const originRaw =
   sanitizeEnvValue(process.env.WEB_ORIGIN) ?? "http://localhost:5173";
+const allowedOrigins = originRaw
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const corsOrigin =
+  allowedOrigins.length <= 1
+    ? allowedOrigins[0]
+    : (
+        requestOrigin: string | undefined,
+        cb: (err: Error | null, allow?: boolean) => void
+      ) => {
+        cb(null, Boolean(requestOrigin && allowedOrigins.includes(requestOrigin)));
+      };
 
 app.disable("x-powered-by");
 app.use((_req, res, next) => {
@@ -42,11 +55,14 @@ app.use((_req, res, next) => {
   res.setHeader("Referrer-Policy", "no-referrer");
   next();
 });
-app.use(cors({ origin, credentials: true }));
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/", (_req, res) => {
-  const web = origin.startsWith("http") ? origin : "https://credit-balance.vercel.app";
+  const web =
+    allowedOrigins.find((o) => o.includes("credit-balance.vercel.app")) ??
+    allowedOrigins[0] ??
+    "https://credit-balance.vercel.app";
   res.status(200).json({
     service: "credit-balance-api",
     health: "/health",
