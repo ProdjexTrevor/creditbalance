@@ -3,7 +3,6 @@ import express from "express";
 import cors from "cors";
 import {
   assertSafeEnv,
-  isProduction,
   isVercelRuntime,
   sanitizeEnvValue,
 } from "./lib/env.js";

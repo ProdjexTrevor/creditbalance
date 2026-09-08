@@ -17,6 +17,11 @@ function run(cmd, cwd) {
 }
 
 if (existsSync(join(repoRoot, "pnpm-lock.yaml"))) {
+  try {
+    run("pnpm rebuild prisma @prisma/client @prisma/engines", repoRoot);
+  } catch {
+    console.warn("pnpm rebuild prisma skipped/failed (continuing)");
+  }
   run("pnpm --filter api exec prisma generate", repoRoot);
 } else {
   // CLI-only upload (no monorepo) — npx fetches prisma CLI
