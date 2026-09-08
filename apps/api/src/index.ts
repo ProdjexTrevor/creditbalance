@@ -1,4 +1,4 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import {
@@ -7,6 +7,26 @@ import {
   isVercelRuntime,
   sanitizeEnvValue,
 } from "./lib/env.js";
+
+// Never load a local .env on Vercel — it can shadow/confuse dashboard secrets.
+if (!process.env.VERCEL) {
+  dotenv.config();
+}
+
+// Normalize secrets in-place (strips CR/LF from Vercel/UI paste).
+for (const key of [
+  "JWT_SECRET",
+  "TOTP_ENCRYPTION_KEY",
+  "EPIC_ENCRYPTION_KEY",
+  "DATABASE_URL",
+  "WEB_ORIGIN",
+]) {
+  const cleaned = sanitizeEnvValue(process.env[key]);
+  if (cleaned !== undefined) process.env[key] = cleaned;
+  else if (process.env[key] != null && !String(process.env[key]).trim()) {
+    delete process.env[key];
+  }
+}
 
 if (!process.env.VERCEL) {
   assertSafeEnv();
@@ -27,12 +47,23 @@ app.use(cors({ origin, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
+  const jwt = sanitizeEnvValue(process.env.JWT_SECRET);
+  const totp = sanitizeEnvValue(process.env.TOTP_ENCRYPTION_KEY);
+  let envError: string | null = null;
+  try {
+    if (isVercelRuntime()) assertSafeEnv();
+  } catch (e) {
+    envError = e instanceof Error ? e.message : "env check failed";
+  }
   res.status(200).json({
-    status: "ok",
+    status: envError ? "misconfigured" : "ok",
     env: isVercelRuntime() ? "vercel" : "node",
     hasJwt: Boolean(process.env.JWT_SECRET),
     hasTotp: Boolean(process.env.TOTP_ENCRYPTION_KEY),
     hasDb: Boolean(process.env.DATABASE_URL),
+    jwtLen: jwt?.length ?? 0,
+    totpLen: totp?.length ?? 0,
+    envError,
   });
 });
 
