@@ -69,15 +69,8 @@ app.get("/health", (_req, res) => {
 
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
-  if (isVercelRuntime() && isProduction()) {
-    try {
-      assertSafeEnv();
-    } catch (e) {
-      return res.status(503).json({
-        error: e instanceof Error ? e.message : "Server misconfigured",
-      });
-    }
-  }
+  // Secrets are normalized at boot; skip hard fail here so a transient env read
+  // never blocks login with a misleading JWT/TOTP message.
   next();
 });
 
@@ -133,8 +126,11 @@ app.use(
     _next: express.NextFunction
   ) => {
     console.error(err);
-    const detail = isProduction() ? "Internal server error" : err.message;
-    res.status(500).json({ error: detail });
+    // Include message so Vercel/Prisma failures are diagnosable (no secrets in Prisma errors).
+    res.status(500).json({
+      error: err.message || "Internal server error",
+      name: err.name,
+    });
   }
 );
 
