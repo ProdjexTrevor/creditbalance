@@ -11,6 +11,12 @@ const app = express();
 const origin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 
 app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
 app.use(cors({ origin, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 
@@ -38,6 +44,8 @@ app.use((req, res, next) => {
   next();
 });
 
+const api = express.Router();
+
 async function mountAppRoutes() {
   const { authRouter } = await import("./routes/auth.js");
   const { tenantsRouter } = await import("./routes/tenants.js");
@@ -52,30 +60,31 @@ async function mountAppRoutes() {
   const { epicRouter } = await import("./routes/epic.js");
   const { requireAuth } = await import("./middleware/auth.js");
 
-  app.use("/auth", authRouter);
-  app.use("/tenants", requireAuth, tenantsRouter);
-  app.use("/clients", requireAuth, clientsRouter);
-  app.use("/mappings", requireAuth, mappingsRouter);
-  app.use("/rules", requireAuth, rulesRouter);
-  app.use("/queues", requireAuth, queuesRouter);
-  app.use("/accounts", requireAuth, accountsRouter);
-  app.use("/catalog", requireAuth, catalogRouter);
-  app.use("/admin", requireAuth, adminRouter);
-  app.use("/imports", requireAuth, importsRouter);
-  app.use("/epic", requireAuth, epicRouter);
+  api.use("/auth", authRouter);
+  api.use("/tenants", requireAuth, tenantsRouter);
+  api.use("/clients", requireAuth, clientsRouter);
+  api.use("/mappings", requireAuth, mappingsRouter);
+  api.use("/rules", requireAuth, rulesRouter);
+  api.use("/queues", requireAuth, queuesRouter);
+  api.use("/accounts", requireAuth, accountsRouter);
+  api.use("/catalog", requireAuth, catalogRouter);
+  api.use("/admin", requireAuth, adminRouter);
+  api.use("/imports", requireAuth, importsRouter);
+  api.use("/epic", requireAuth, epicRouter);
 }
 
 const routesReady = mountAppRoutes().catch((err) => {
   console.error("Failed to mount routes", err);
+  throw err;
 });
 
 app.use(async (req, res, next) => {
   if (req.path === "/health") return next();
   try {
     await routesReady;
-    next();
+    return api(req, res, next);
   } catch (e) {
-    next(e instanceof Error ? e : new Error("Route mount failed"));
+    return next(e instanceof Error ? e : new Error("Route mount failed"));
   }
 });
 
@@ -87,7 +96,8 @@ app.use(
     _next: express.NextFunction
   ) => {
     console.error(err);
-    res.status(500).json({ error: err.message || "Internal server error" });
+    const detail = isProduction() ? "Internal server error" : err.message;
+    res.status(500).json({ error: detail });
   }
 );
 
