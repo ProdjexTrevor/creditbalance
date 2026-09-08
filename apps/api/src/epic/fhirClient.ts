@@ -34,7 +34,25 @@ export class EpicFhirClient {
     });
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(`FHIR ${path} failed (${res.status})`);
+      let detail = "";
+      try {
+        const body = JSON.parse(text) as {
+          issue?: Array<{ diagnostics?: string; code?: string }>;
+          resourceType?: string;
+        };
+        detail =
+          body.issue?.map((i) => i.diagnostics || i.code).filter(Boolean).join("; ") ||
+          text.slice(0, 300);
+      } catch {
+        detail = text.slice(0, 300);
+      }
+      const hint =
+        res.status === 403
+          ? " In Epic app settings, add R4 APIs: Patient.Read, Patient.Search, Coverage.Search, Account.Search (Premium Billing), then Save and wait a few minutes."
+          : "";
+      throw new Error(
+        `FHIR ${path} failed (${res.status})${detail ? `: ${detail}` : ""}.${hint}`
+      );
     }
     return JSON.parse(text) as T;
   }
