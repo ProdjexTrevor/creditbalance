@@ -76,6 +76,26 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.get("/health/db", async (_req, res) => {
+  try {
+    const { prisma } = await import("./lib/prisma.js");
+    const started = Date.now();
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1 AS ok`,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("DB connect timeout (5s)")), 5000)
+      ),
+    ]);
+    res.json({ status: "ok", ms: Date.now() - started });
+  } catch (e) {
+    res.status(503).json({
+      status: "db_unreachable",
+      error: e instanceof Error ? e.message : "db error",
+      hint: "Allow Remote MySQL from any host (%) for this DB user on host06.prodjex.com so Vercel can connect.",
+    });
+  }
+});
+
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
   // Secrets are normalized at boot; skip hard fail here so a transient env read
