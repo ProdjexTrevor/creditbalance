@@ -2,11 +2,8 @@ import "dotenv/config";
 import "express-async-errors";
 import express from "express";
 import cors from "cors";
-import helmetImport from "helmet";
 import morgan from "morgan";
-import rateLimitImport from "express-rate-limit";
 import { assertSafeEnv, isProduction, isVercelRuntime } from "./lib/env.js";
-import { asMiddlewareFactory } from "./lib/middlewareFactory.js";
 import { authRouter } from "./routes/auth.js";
 import { tenantsRouter } from "./routes/tenants.js";
 import { clientsRouter } from "./routes/clients.js";
@@ -26,19 +23,16 @@ if (!process.env.VERCEL) {
   assertSafeEnv();
 }
 
-const helmet = asMiddlewareFactory(helmetImport);
-const rateLimit = asMiddlewareFactory(rateLimitImport);
-
 const app = express();
 const origin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 
 app.disable("x-powered-by");
-app.use(
-  helmet({
-    contentSecurityPolicy: false,
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-  })
-);
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  next();
+});
 app.use(cors({ origin, credentials: true }));
 app.use((req, res, next) => {
   const limit = req.path.startsWith("/imports") ? "10mb" : "1mb";
@@ -46,14 +40,7 @@ app.use((req, res, next) => {
 });
 app.use(morgan(isProduction() ? "combined" : "dev"));
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many attempts. Try again later." },
-});
-
+/** Health first — no secrets / DB required */
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -79,11 +66,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-app.use("/auth/login", authLimiter);
-app.use("/auth/login/2fa", authLimiter);
-app.use("/auth/profile/password", authLimiter);
-app.use("/auth/2fa/disable", authLimiter);
 
 app.use("/auth", authRouter);
 app.use("/tenants", requireAuth, tenantsRouter);
