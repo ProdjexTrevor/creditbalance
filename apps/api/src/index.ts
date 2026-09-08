@@ -45,6 +45,16 @@ app.use((_req, res, next) => {
 app.use(cors({ origin, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/", (_req, res) => {
+  const web = origin.startsWith("http") ? origin : "https://credit-balance.vercel.app";
+  res.status(200).json({
+    service: "credit-balance-api",
+    health: "/health",
+    app: web,
+    message: "This is the API. Open the app URL in your browser.",
+  });
+});
+
 app.get("/health", (_req, res) => {
   const jwt = sanitizeEnvValue(process.env.JWT_SECRET);
   const totp = sanitizeEnvValue(process.env.TOTP_ENCRYPTION_KEY);
