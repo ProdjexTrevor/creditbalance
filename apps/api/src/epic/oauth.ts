@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { decryptAtRest } from "../lib/secretCrypto.js";
 import { normalizeFhirBase, smartConfigUrl } from "./config.js";
 import { assertSafeEpicUrl } from "./urlAllowlist.js";
+import { loadSandboxPrivateKeyPem } from "./sandboxKey.js";
 
 export type EpicTokenResponse = {
   access_token: string;
@@ -19,6 +20,17 @@ type ConnectionRow = {
   jwkKeyId: string | null;
   scopes: string;
 };
+
+function resolvePrivateKeyPem(conn: ConnectionRow): string {
+  if (conn.privateKeyEnc) {
+    return decryptAtRest(conn.privateKeyEnc);
+  }
+  const sandbox = loadSandboxPrivateKeyPem();
+  if (sandbox) return sandbox;
+  throw new Error(
+    "Epic private key not configured. In Admin → Epic click “Fill sandbox key + URLs”, enter your Client ID, then Save before Test connection."
+  );
+}
 
 let discoveryCache: Map<string, { tokenUrl: string; expires: number }> = new Map();
 
@@ -76,13 +88,7 @@ async function buildClientAssertion(
 export async function fetchEpicAccessToken(
   conn: ConnectionRow
 ): Promise<EpicTokenResponse> {
-  if (!conn.privateKeyEnc) {
-    throw new Error(
-      "Epic private key not configured. Register your app at fhir.epic.com and upload the RSA private key PEM."
-    );
-  }
-
-  const privateKeyPem = decryptAtRest(conn.privateKeyEnc);
+  const privateKeyPem = resolvePrivateKeyPem(conn);
   const tokenUrl = await resolveTokenUrl(conn);
 
   const assertion = await buildClientAssertion(

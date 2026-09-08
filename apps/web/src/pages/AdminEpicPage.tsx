@@ -144,16 +144,36 @@ export function AdminEpicPage() {
       setScopes(r.data.scopes);
       setEnabled(true);
       setEnvironment("SANDBOX");
-      if (r.data.privateKeyPem) {
-        setPrivateKeyPem(r.data.privateKeyPem);
-        setMsg(
-          "Sandbox key loaded. Paste your Epic Non-Production Client ID, Save, then Test connection. Also set Epic JWK Set URL to the URL shown below."
-        );
-      } else {
+      if (!r.data.privateKeyPem) {
         setError(
-          "Private key not available on this server. Copy apps/api/epic-jwks/sandbox-private.pem into the PEM field, or set EPIC_SANDBOX_PRIVATE_KEY on the API."
+          "Private key not available on this server. Set EPIC_SANDBOX_PRIVATE_KEY or keep local epic-jwks/sandbox-private.pem."
         );
+        return;
       }
+      setPrivateKeyPem(r.data.privateKeyPem);
+      if (!epicClientId.trim()) {
+        setMsg(
+          "Sandbox key loaded into the form. Paste your Epic Non-Production Client ID, then click Save."
+        );
+        return;
+      }
+      await api.put(`/epic/${clientId}/config`, {
+        enabled: true,
+        environment: "SANDBOX",
+        fhirBaseUrl: r.data.fhirBaseUrl,
+        tokenUrl: r.data.tokenUrl,
+        epicClientId: epicClientId.trim(),
+        privateKeyPem: r.data.privateKeyPem,
+        jwkKeyId: r.data.kid,
+        scopes: r.data.scopes,
+      });
+      setPrivateKeyPem("");
+      setHasPrivateKey(true);
+      setMsg(
+        "Sandbox key saved. Click Test connection. Epic JWK Set URL must be: " +
+          r.data.jwksUrl
+      );
+      load();
     } catch (err: unknown) {
       setError(
         (err as { response?: { data?: { error?: string } } }).response?.data

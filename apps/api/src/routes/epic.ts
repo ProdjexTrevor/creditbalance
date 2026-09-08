@@ -65,35 +65,21 @@ epicRouter.get(
   "/sandbox-setup",
   requireRole(...adminRoles),
   async (_req, res) => {
-    const { readFileSync, existsSync } = await import("node:fs");
-    const { join, dirname } = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
+    const { loadSandboxPrivateKeyPem, sandboxKid } = await import(
+      "../epic/sandboxKey.js"
+    );
     const { getPublicJwksUrl, getSandboxJwks } = await import(
       "../epic/jwksStore.js"
     );
-    const { DEFAULT_EPIC_KID } = await import("../epic/keys.js");
 
-    let privateKeyPem =
-      process.env.EPIC_SANDBOX_PRIVATE_KEY?.replace(/\\n/g, "\n").trim() || "";
-    if (!privateKeyPem) {
-      const pemPath = join(
-        dirname(fileURLToPath(import.meta.url)),
-        "..",
-        "..",
-        "epic-jwks",
-        "sandbox-private.pem"
-      );
-      if (existsSync(pemPath)) {
-        privateKeyPem = readFileSync(pemPath, "utf8").trim();
-      }
-    }
-
+    const privateKeyPem = loadSandboxPrivateKeyPem();
     const jwksUrl = getPublicJwksUrl();
     const jwks = getSandboxJwks();
+    const kid = sandboxKid();
 
     res.json({
       jwksUrl,
-      kid: DEFAULT_EPIC_KID,
+      kid,
       hasPrivateKey: Boolean(privateKeyPem),
       privateKeyPem: privateKeyPem || null,
       jwks,
@@ -103,7 +89,7 @@ epicRouter.get(
       epicInstructions: [
         `In Epic app settings, set Non-Production JWK Set URL to: ${jwksUrl}`,
         "Wait a few minutes after saving in Epic for key cache.",
-        "Paste your Non-Production Client ID below, click Fill sandbox key, Save, then Test connection.",
+        "Paste your Non-Production Client ID, click Fill sandbox key, Save, then Test connection.",
       ],
     });
   }
@@ -192,12 +178,25 @@ epicRouter.put(
       });
     }
 
+    const { loadSandboxPrivateKeyPem, sandboxKid } = await import(
+      "../epic/sandboxKey.js"
+    );
+    let pemToStore = data.privateKeyPem;
+    if (pemToStore === undefined && !existing?.privateKeyEnc) {
+      pemToStore = loadSandboxPrivateKeyPem();
+    }
+
     const privateKeyEnc =
       data.privateKeyPem === null
         ? null
-        : data.privateKeyPem
-          ? encryptAtRest(data.privateKeyPem)
+        : pemToStore && isPemPrivateKey(pemToStore)
+          ? encryptAtRest(pemToStore)
           : existing?.privateKeyEnc;
+
+    const resolvedKid =
+      data.jwkKeyId !== undefined
+        ? data.jwkKeyId
+        : existing?.jwkKeyId ?? (privateKeyEnc ? sandboxKid() : null);
 
     const conn = await prisma.clientEpicConnection.upsert({
       where: { clientId: client.id },
@@ -209,7 +208,7 @@ epicRouter.put(
         tokenUrl: data.tokenUrl ?? EPIC_SANDBOX.tokenUrl,
         epicClientId: data.epicClientId ?? "",
         privateKeyEnc,
-        jwkKeyId: data.jwkKeyId ?? null,
+        jwkKeyId: resolvedKid,
         mrnSystem: data.mrnSystem ?? EPIC_SANDBOX.defaultMrnSystem,
         scopes: data.scopes ?? EPIC_SANDBOX.defaultScopes,
       },
@@ -219,8 +218,11 @@ epicRouter.put(
         ...(data.fhirBaseUrl ? { fhirBaseUrl: data.fhirBaseUrl } : {}),
         ...(data.tokenUrl !== undefined ? { tokenUrl: data.tokenUrl } : {}),
         ...(data.epicClientId ? { epicClientId: data.epicClientId } : {}),
-        ...(data.privateKeyPem !== undefined ? { privateKeyEnc } : {}),
-        ...(data.jwkKeyId !== undefined ? { jwkKeyId: data.jwkKeyId } : {}),
+        ...(privateKeyEnc !== undefined &&
+        (data.privateKeyPem !== undefined || !existing?.privateKeyEnc)
+          ? { privateKeyEnc }
+          : {}),
+        ...(resolvedKid !== undefined ? { jwkKeyId: resolvedKid } : {}),
         ...(data.mrnSystem !== undefined ? { mrnSystem: data.mrnSystem } : {}),
         ...(data.scopes ? { scopes: data.scopes } : {}),
       },
