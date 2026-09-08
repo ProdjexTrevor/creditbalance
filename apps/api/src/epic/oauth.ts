@@ -68,6 +68,8 @@ async function buildClientAssertion(
   keyId?: string | null
 ): Promise<string> {
   const key = await importPKCS8(privateKeyPem, "RS384");
+  // Epic is picky: audience must match the token endpoint exactly (no trailing slash).
+  const audience = tokenUrl.replace(/\/+$/, "");
   const jwt = await new SignJWT({})
     .setProtectedHeader({
       alg: "RS384",
@@ -76,9 +78,9 @@ async function buildClientAssertion(
     })
     .setIssuer(clientId)
     .setSubject(clientId)
-    .setAudience(tokenUrl)
+    .setAudience(audience)
     .setJti(randomUUID())
-    .setExpirationTime("4m")
+    .setExpirationTime("5m")
     .setIssuedAt()
     .sign(key);
   return jwt;
@@ -88,34 +90,69 @@ async function buildClientAssertion(
 export async function fetchEpicAccessToken(
   conn: ConnectionRow
 ): Promise<EpicTokenResponse> {
+  const clientId = conn.epicClientId?.trim();
+  if (!clientId) {
+    throw new Error("Epic client ID is missing. Paste your Non-Production Client ID and Save.");
+  }
+
   const privateKeyPem = resolvePrivateKeyPem(conn);
-  const tokenUrl = await resolveTokenUrl(conn);
+  const tokenUrl = (await resolveTokenUrl(conn)).replace(/\/+$/, "");
+  const kid = conn.jwkKeyId?.trim() || "credit-balance-sandbox";
 
   const assertion = await buildClientAssertion(
-    conn.epicClientId,
+    clientId,
     tokenUrl,
     privateKeyPem,
-    conn.jwkKeyId
+    kid
   );
+
+  const scopes = (conn.scopes || "")
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(" ");
 
   const body = new URLSearchParams({
     grant_type: "client_credentials",
+    client_id: clientId,
     client_assertion_type:
       "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
     client_assertion: assertion,
-    scope: conn.scopes,
   });
+  if (scopes) body.set("scope", scopes);
 
   const res = await fetch(tokenUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
     body: body.toString(),
   });
 
-  if (!res.ok) {
-    throw new Error(`Epic token request failed (${res.status})`);
-  }
   const text = await res.text();
+  if (!res.ok) {
+    let detail = text.slice(0, 500);
+    try {
+      const parsed = JSON.parse(text) as {
+        error?: string;
+        error_description?: string;
+        message?: string;
+      };
+      detail =
+        [parsed.error, parsed.error_description || parsed.message]
+          .filter(Boolean)
+          .join(": ") || detail;
+    } catch {
+      /* keep raw */
+    }
+    throw new Error(
+      `Epic token request failed (${res.status}): ${detail || "no body"}. ` +
+        "Confirm Non-Production Client ID, JWK Set URL is " +
+        "https://credit-balnace-api.vercel.app/.well-known/jwks.json, " +
+        "and sandbox APIs (Patient/Coverage/Account read) are enabled on the Epic app."
+    );
+  }
 
   return JSON.parse(text) as EpicTokenResponse;
 }
