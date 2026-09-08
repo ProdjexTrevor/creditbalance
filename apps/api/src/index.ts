@@ -62,26 +62,18 @@ app.get("/health", (_req, res) => {
 });
 
 /** Fail fast on Vercel when required secrets are missing (health still works). */
-let vercelEnvOk: boolean | null = null;
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
   if (isVercelRuntime() && isProduction()) {
-    if (vercelEnvOk === null) {
-      try {
-        assertSafeEnv();
-        vercelEnvOk = true;
-      } catch (e) {
-        vercelEnvOk = false;
-        return res.status(503).json({
-          error:
-            e instanceof Error
-              ? e.message
-              : "Server misconfigured — set JWT_SECRET and TOTP_ENCRYPTION_KEY in Vercel",
-        });
-      }
-    } else if (vercelEnvOk === false) {
+    try {
+      assertSafeEnv();
+    } catch (e) {
+      console.error("env check failed", e);
       return res.status(503).json({
-        error: "Server misconfigured — set JWT_SECRET and TOTP_ENCRYPTION_KEY in Vercel",
+        error:
+          e instanceof Error
+            ? e.message
+            : "Server misconfigured — set JWT_SECRET and TOTP_ENCRYPTION_KEY in Vercel",
       });
     }
   }
