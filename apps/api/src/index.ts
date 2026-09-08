@@ -116,7 +116,7 @@ app.get("/health/db", async (_req, res) => {
 app.get("/.well-known/jwks.json", async (_req, res) => {
   const { getSandboxJwks } = await import("./epic/jwksStore.js");
   const jwks = getSandboxJwks();
-  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.json(jwks);
 });

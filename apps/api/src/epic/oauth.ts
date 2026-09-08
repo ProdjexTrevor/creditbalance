@@ -80,7 +80,7 @@ async function buildClientAssertion(
     .setSubject(clientId)
     .setAudience(audience)
     .setJti(randomUUID())
-    .setExpirationTime("5m")
+    .setExpirationTime("4m")
     .setIssuedAt()
     .sign(key);
   return jwt;
@@ -114,11 +114,11 @@ export async function fetchEpicAccessToken(
 
   const body = new URLSearchParams({
     grant_type: "client_credentials",
-    client_id: clientId,
     client_assertion_type:
       "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
     client_assertion: assertion,
   });
+  // Do NOT send client_id in the body — Epic sandbox often returns invalid_client if present.
   if (scopes) body.set("scope", scopes);
 
   const res = await fetch(tokenUrl, {
@@ -146,11 +146,16 @@ export async function fetchEpicAccessToken(
     } catch {
       /* keep raw */
     }
+    const hints =
+      detail.includes("invalid_client")
+        ? " Use the Non-Production (sandbox) Client ID — not Production. " +
+          "Re-save JWK Set URL in Epic as exactly " +
+          "https://credit-balnace-api.vercel.app/.well-known/jwks.json " +
+          "(note spelling balnace). Epic can take minutes–hours to pick up JWKS changes."
+        : " Confirm Non-Production Client ID, JWK Set URL, and sandbox APIs " +
+          "(Patient/Coverage/Account read) are enabled.";
     throw new Error(
-      `Epic token request failed (${res.status}): ${detail || "no body"}. ` +
-        "Confirm Non-Production Client ID, JWK Set URL is " +
-        "https://credit-balnace-api.vercel.app/.well-known/jwks.json, " +
-        "and sandbox APIs (Patient/Coverage/Account read) are enabled on the Epic app."
+      `Epic token request failed (${res.status}): ${detail || "no body"}.${hints}`
     );
   }
 
