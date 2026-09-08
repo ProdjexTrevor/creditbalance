@@ -277,15 +277,32 @@ export function AdminEpicPage() {
         <>
       <p className="muted">
         Facility: <strong>{clientName}</strong> — SMART Backend Services (FHIR R4).
-        Register at{" "}
-        <a href="https://fhir.epic.com" target="_blank" rel="noreferrer">
-          fhir.epic.com
-        </a>
-        . Set Epic <strong>Non-Production JWK Set URL</strong> to:
       </p>
-      <p className="mono" style={{ wordBreak: "break-all" }}>
-        {jwksUrl}
-      </p>
+      <div className="card stack" style={{ marginBottom: "1rem" }}>
+        <h2>Epic registration checklist</h2>
+        <ol className="muted" style={{ margin: 0, paddingLeft: "1.25rem" }}>
+          <li>
+            In Epic, open your app → use the <strong>Non-Production Client ID</strong> only
+            (not Production).
+          </li>
+          <li>
+            Set <strong>Non-Production JWK Set URL</strong> to exactly:
+            <div className="mono" style={{ wordBreak: "break-all", marginTop: "0.35rem" }}>
+              {jwksUrl}
+            </div>
+          </li>
+          <li>
+            Save in Epic, wait 15–30 minutes (sandbox key cache can be slow), then test here.
+          </li>
+          <li>
+            Confirm JWKS is reachable:{" "}
+            <a href={jwksUrl} target="_blank" rel="noreferrer">
+              open JWKS
+            </a>{" "}
+            — should show kid <span className="mono">credit-balance-sandbox</span>.
+          </li>
+        </ol>
+      </div>
 
       {error && <div className="error">{error}</div>}
       {msg && <p className="muted">{msg}</p>}
