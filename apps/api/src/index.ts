@@ -1,14 +1,20 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { assertSafeEnv, isProduction, isVercelRuntime } from "./lib/env.js";
+import {
+  assertSafeEnv,
+  isProduction,
+  isVercelRuntime,
+  sanitizeEnvValue,
+} from "./lib/env.js";
 
 if (!process.env.VERCEL) {
   assertSafeEnv();
 }
 
 const app = express();
-const origin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+const origin =
+  sanitizeEnvValue(process.env.WEB_ORIGIN) ?? "http://localhost:5173";
 
 app.disable("x-powered-by");
 app.use((_req, res, next) => {

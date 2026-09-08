@@ -3,6 +3,18 @@
  * Production refuses weak/missing secrets. Development allows placeholders with a warning.
  */
 
+/** Strip quotes / trailing newlines that often sneak in via Vercel env UI paste. */
+export function sanitizeEnvValue(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  let v = value.trim().replace(/^["']|["']$/g, "");
+  v = v.replace(/(\\r\\n|\\n|\r\n|\n|\r)+$/g, "").trim();
+  return v || undefined;
+}
+
+function env(name: string): string | undefined {
+  return sanitizeEnvValue(process.env[name]);
+}
+
 const WEAK = new Set([
   "",
   "dev-secret",
@@ -32,11 +44,11 @@ export function isVercelRuntime(): boolean {
 
 /** Throws if secrets are missing/weak. Does not call process.exit (safe for serverless). */
 export function assertSafeEnv(): void {
-  const jwt = process.env.JWT_SECRET;
+  const jwt = env("JWT_SECRET");
   const enc =
-    process.env.TOTP_ENCRYPTION_KEY ||
-    process.env.EPIC_ENCRYPTION_KEY ||
-    process.env.JWT_SECRET;
+    env("TOTP_ENCRYPTION_KEY") ||
+    env("EPIC_ENCRYPTION_KEY") ||
+    env("JWT_SECRET");
 
   const problems: string[] = [];
 
@@ -48,11 +60,7 @@ export function assertSafeEnv(): void {
       "TOTP_ENCRYPTION_KEY (or EPIC_ENCRYPTION_KEY) is missing or too weak"
     );
   }
-  if (
-    process.env.TOTP_ENCRYPTION_KEY &&
-    process.env.JWT_SECRET &&
-    process.env.TOTP_ENCRYPTION_KEY === process.env.JWT_SECRET
-  ) {
+  if (env("TOTP_ENCRYPTION_KEY") && env("JWT_SECRET") && env("TOTP_ENCRYPTION_KEY") === env("JWT_SECRET")) {
     problems.push(
       "TOTP_ENCRYPTION_KEY must differ from JWT_SECRET (do not share keys)"
     );
@@ -77,7 +85,7 @@ export function assertSafeEnv(): void {
 }
 
 export function jwtSecret(): string {
-  const s = process.env.JWT_SECRET;
+  const s = env("JWT_SECRET");
   if (!s) {
     if (isProduction()) throw new Error("JWT_SECRET is required");
     return "dev-secret-local-only-do-not-use";
@@ -87,9 +95,9 @@ export function jwtSecret(): string {
 
 export function encryptionSecret(): string {
   const s =
-    process.env.TOTP_ENCRYPTION_KEY ||
-    process.env.EPIC_ENCRYPTION_KEY ||
-    process.env.JWT_SECRET;
+    env("TOTP_ENCRYPTION_KEY") ||
+    env("EPIC_ENCRYPTION_KEY") ||
+    env("JWT_SECRET");
   if (!s) {
     if (isProduction()) throw new Error("TOTP_ENCRYPTION_KEY is required");
     return "dev-enc-local-only-do-not-use";
