@@ -2,9 +2,11 @@ import "dotenv/config";
 import "express-async-errors";
 import express from "express";
 import cors from "cors";
+import helmetImport from "helmet";
 import morgan from "morgan";
+import rateLimitImport from "express-rate-limit";
 import { assertSafeEnv, isProduction, isVercelRuntime } from "./lib/env.js";
-import { helmet, rateLimit } from "./lib/cjsMiddleware.js";
+import { asMiddlewareFactory } from "./lib/middlewareFactory.js";
 import { authRouter } from "./routes/auth.js";
 import { tenantsRouter } from "./routes/tenants.js";
 import { clientsRouter } from "./routes/clients.js";
@@ -23,6 +25,9 @@ import { startScheduler } from "./jobs/scheduler.js";
 if (!process.env.VERCEL) {
   assertSafeEnv();
 }
+
+const helmet = asMiddlewareFactory(helmetImport);
+const rateLimit = asMiddlewareFactory(rateLimitImport);
 
 const app = express();
 const origin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
