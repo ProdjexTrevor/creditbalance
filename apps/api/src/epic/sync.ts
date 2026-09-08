@@ -57,17 +57,29 @@ async function enrichPatient(
   conn: ClientEpicConnection,
   patient: Record<string, unknown>
 ): Promise<EpicPatientPreview> {
-  const pid = String(patient.id ?? "");
-  const [covBundle, acctBundle] = await Promise.all([
-    fhir.searchCoverage(pid),
-    fhir.searchAccounts(pid),
-  ]);
-  const coverages = bundleResources(covBundle) as Parameters<
-    typeof toPreview
-  >[1];
-  const accounts = bundleResources(acctBundle) as Parameters<
-    typeof toPreview
-  >[2][];
+  const pid = String(patient.id ?? "").trim();
+  let coverages: Parameters<typeof toPreview>[1] = [];
+  let accounts: Parameters<typeof toPreview>[2][] = [];
+
+  // Patient search can succeed while Coverage/Account APIs are missing or picky —
+  // don't fail the whole search if enrichment fails.
+  if (pid) {
+    const [covResult, acctResult] = await Promise.allSettled([
+      fhir.searchCoverage(pid),
+      fhir.searchAccounts(pid),
+    ]);
+    if (covResult.status === "fulfilled") {
+      coverages = bundleResources(covResult.value) as typeof coverages;
+    } else {
+      console.warn("Coverage enrich failed", covResult.reason);
+    }
+    if (acctResult.status === "fulfilled") {
+      accounts = bundleResources(acctResult.value) as typeof accounts;
+    } else {
+      console.warn("Account enrich failed", acctResult.reason);
+    }
+  }
+
   const account = accounts[0] ?? null;
   return toPreview(
     patient as Parameters<typeof toPreview>[0],

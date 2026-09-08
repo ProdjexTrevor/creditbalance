@@ -16,10 +16,13 @@ export class EpicFhirClient {
 
   private url(path: string, params?: Record<string, string>): string {
     const base = normalizeFhirBase(this.fhirBaseUrl);
-    const u = new URL(path.replace(/^\//, ""), base);
+    const pathPart = path.replace(/^\//, "");
+    const u = new URL(pathPart, base);
     if (params) {
       for (const [k, v] of Object.entries(params)) {
-        if (v) u.searchParams.set(k, v);
+        if (v != null && String(v).trim() !== "") {
+          u.searchParams.set(k, String(v).trim());
+        }
       }
     }
     return u.toString();
@@ -48,8 +51,10 @@ export class EpicFhirClient {
       }
       const hint =
         res.status === 403
-          ? " In Epic app settings, add R4 APIs: Patient.Read, Patient.Search, Coverage.Search, Account.Search (Premium Billing), then Save and wait a few minutes."
-          : "";
+          ? " In Epic, add R4 Search APIs: Patient.Search, Coverage.Search (Patient Insurance Information), Account.Search (Premium Billing)."
+          : res.status === 400 && /required/i.test(detail)
+            ? " Epic requires a patient id on Coverage/Account search. Also enable Coverage.Search (Patient Insurance Information) R4 — not only Outside Record / STU3."
+            : "";
       throw new Error(
         `FHIR ${path} failed (${res.status})${detail ? `: ${detail}` : ""}.${hint}`
       );
@@ -76,16 +81,25 @@ export class EpicFhirClient {
   }
 
   async searchCoverage(patientFhirId: string) {
-    return this.get<FhirBundle>("Coverage", {
-      patient: patientFhirId,
-    });
+    const id = patientFhirId.replace(/^Patient\//i, "").trim();
+    if (!id) {
+      return emptyBundle();
+    }
+    // Epic Coverage.Search (Patient Insurance Information) requires `patient`.
+    return this.get<FhirBundle>("Coverage", { patient: id });
   }
 
   async searchAccounts(patientFhirId: string) {
-    return this.get<FhirBundle>("Account", {
-      patient: patientFhirId,
-    });
+    const id = patientFhirId.replace(/^Patient\//i, "").trim();
+    if (!id) {
+      return emptyBundle();
+    }
+    return this.get<FhirBundle>("Account", { patient: id });
   }
+}
+
+function emptyBundle(): FhirBundle {
+  return { resourceType: "Bundle", type: "searchset", total: 0, entry: [] };
 }
 
 export function bundleResources<T>(bundle: FhirBundle<T>): T[] {
