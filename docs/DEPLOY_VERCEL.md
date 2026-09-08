@@ -49,10 +49,19 @@ Other routes return 503 until `JWT_SECRET` and `TOTP_ENCRYPTION_KEY` are set.
 
 ## Frontend (separate project)
 
-Create a second Vercel project:
-
 | Setting | Value |
 |---------|--------|
+| **Vercel project** | `credit-balance` |
+| **Production URL** | https://credit-balance.vercel.app |
 | Root Directory | `apps/web` |
 | Framework | Vite |
-| Env | `VITE_API_URL=https://YOUR-API.vercel.app` |
+| Env | `VITE_API_URL=https://credit-balnace-api.vercel.app` |
+
+Deploy from `apps/web`:
+
+```bash
+cd apps/web
+vercel deploy --prod --yes --scope prodjex
+```
+
+Set API `WEB_ORIGIN=https://credit-balance.vercel.app` so browser CORS allows the UI.
