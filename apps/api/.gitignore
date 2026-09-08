@@ -1,2 +1,5 @@
 .vercel
 .env*.local
+
+epic-jwks/sandbox-private.pem
+*.pem

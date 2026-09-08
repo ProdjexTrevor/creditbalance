@@ -112,10 +112,27 @@ app.get("/health/db", async (_req, res) => {
   }
 });
 
+/** Epic fetches this URL (no auth) to verify JWT client assertions. */
+app.get("/.well-known/jwks.json", async (_req, res) => {
+  const { getSandboxJwks } = await import("./epic/jwksStore.js");
+  const jwks = getSandboxJwks();
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.json(jwks);
+});
+app.get("/epic/jwks.json", (_req, res) => {
+  res.redirect(302, "/.well-known/jwks.json");
+});
+
 app.use((req, res, next) => {
-  if (req.path === "/health") return next();
-  // Secrets are normalized at boot; skip hard fail here so a transient env read
-  // never blocks login with a misleading JWT/TOTP message.
+  if (
+    req.path === "/health" ||
+    req.path === "/health/db" ||
+    req.path === "/.well-known/jwks.json" ||
+    req.path === "/epic/jwks.json"
+  ) {
+    return next();
+  }
   next();
 });
 

@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "n": "ygLF4p8pCgefWUZLWCSE0GFL86OSQSs-H6zrm7eiKsznQeCede4abehm9UXme4wIVIzYIMnBxZu5CKqjLIev6em68n3XJD1tJDZe3WutEtZP4VtKq92IHIxLc2pcmk1Rq7wUYg_5v5R5js5gXl6ginOn7tbIpjqKsnQ7p9OaeLpow7sweErtz5m4YkIVm5soW5g2HROZT4_Uznb-ecqsFGsGxEXFuF_UtQ5woUE6PbUUrOcspjaAd3_AhiHd13_X-xWrEV6LB75Xn0TQESpFR-4QOhgOuI-iDVM6ljDRk-lAQtQcuCrVK61RWUQ4-Rbf8HenUKzNbct6oT6neBxFvQ",
+      "e": "AQAB",
+      "kid": "credit-balance-sandbox",
+      "alg": "RS384",
+      "use": "sig"
+    }
+  ]
+}

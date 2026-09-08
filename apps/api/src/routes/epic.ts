@@ -54,8 +54,60 @@ function publicConfig(row: {
 }
 
 epicRouter.get("/defaults", (_req, res) => {
-  res.json(EPIC_SANDBOX);
+  res.json({
+    ...EPIC_SANDBOX,
+    jwksUrl: "https://credit-balnace-api.vercel.app/.well-known/jwks.json",
+    defaultKid: "credit-balance-sandbox",
+  });
 });
+
+epicRouter.get(
+  "/sandbox-setup",
+  requireRole(...adminRoles),
+  async (_req, res) => {
+    const { readFileSync, existsSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const { getPublicJwksUrl, getSandboxJwks } = await import(
+      "../epic/jwksStore.js"
+    );
+    const { DEFAULT_EPIC_KID } = await import("../epic/keys.js");
+
+    let privateKeyPem =
+      process.env.EPIC_SANDBOX_PRIVATE_KEY?.replace(/\\n/g, "\n").trim() || "";
+    if (!privateKeyPem) {
+      const pemPath = join(
+        dirname(fileURLToPath(import.meta.url)),
+        "..",
+        "..",
+        "epic-jwks",
+        "sandbox-private.pem"
+      );
+      if (existsSync(pemPath)) {
+        privateKeyPem = readFileSync(pemPath, "utf8").trim();
+      }
+    }
+
+    const jwksUrl = getPublicJwksUrl();
+    const jwks = getSandboxJwks();
+
+    res.json({
+      jwksUrl,
+      kid: DEFAULT_EPIC_KID,
+      hasPrivateKey: Boolean(privateKeyPem),
+      privateKeyPem: privateKeyPem || null,
+      jwks,
+      fhirBaseUrl: EPIC_SANDBOX.fhirBaseUrl,
+      tokenUrl: EPIC_SANDBOX.tokenUrl,
+      scopes: EPIC_SANDBOX.defaultScopes,
+      epicInstructions: [
+        `In Epic app settings, set Non-Production JWK Set URL to: ${jwksUrl}`,
+        "Wait a few minutes after saving in Epic for key cache.",
+        "Paste your Non-Production Client ID below, click Fill sandbox key, Save, then Test connection.",
+      ],
+    });
+  }
+);
 
 epicRouter.get("/:clientId/config", async (req, res) => {
   const client = await assertClientAccess(

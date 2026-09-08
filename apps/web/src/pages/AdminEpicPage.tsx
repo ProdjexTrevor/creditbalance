@@ -22,6 +22,8 @@ type Defaults = {
   tokenUrl: string;
   defaultMrnSystem: string;
   defaultScopes: string;
+  jwksUrl?: string;
+  defaultKid?: string;
 };
 
 type Preview = {
@@ -64,10 +66,15 @@ export function AdminEpicPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const [jwksUrl, setJwksUrl] = useState(
+    "https://credit-balnace-api.vercel.app/.well-known/jwks.json"
+  );
+
   const load = useCallback(() => {
     if (!clientId) return;
     api.get(`/epic/${clientId}/config`).then((r) => {
       setDefaults(r.data.defaults);
+      if (r.data.defaults?.jwksUrl) setJwksUrl(r.data.defaults.jwksUrl);
       const c = r.data.config as EpicConfig | null;
       if (c) {
         setEnabled(c.enabled);
@@ -84,6 +91,7 @@ export function AdminEpicPage() {
         setTokenUrl(r.data.defaults.tokenUrl);
         setMrnSystem(r.data.defaults.defaultMrnSystem);
         setScopes(r.data.defaults.defaultScopes);
+        if (r.data.defaults.defaultKid) setJwkKeyId(r.data.defaults.defaultKid);
       }
     });
   }, [clientId]);
@@ -117,6 +125,39 @@ export function AdminEpicPage() {
       setError(
         (err as { response?: { data?: { error?: string } } }).response?.data
           ?.error || "Could not save config"
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fillSandboxKey() {
+    setBusy(true);
+    setError("");
+    setMsg("");
+    try {
+      const r = await api.get("/epic/sandbox-setup");
+      setJwksUrl(r.data.jwksUrl);
+      setJwkKeyId(r.data.kid);
+      setFhirBaseUrl(r.data.fhirBaseUrl);
+      setTokenUrl(r.data.tokenUrl);
+      setScopes(r.data.scopes);
+      setEnabled(true);
+      setEnvironment("SANDBOX");
+      if (r.data.privateKeyPem) {
+        setPrivateKeyPem(r.data.privateKeyPem);
+        setMsg(
+          "Sandbox key loaded. Paste your Epic Non-Production Client ID, Save, then Test connection. Also set Epic JWK Set URL to the URL shown below."
+        );
+      } else {
+        setError(
+          "Private key not available on this server. Copy apps/api/epic-jwks/sandbox-private.pem into the PEM field, or set EPIC_SANDBOX_PRIVATE_KEY on the API."
+        );
+      }
+    } catch (err: unknown) {
+      setError(
+        (err as { response?: { data?: { error?: string } } }).response?.data
+          ?.error || "Could not load sandbox key setup"
       );
     } finally {
       setBusy(false);
@@ -215,14 +256,15 @@ export function AdminEpicPage() {
       ) : (
         <>
       <p className="muted">
-        Facility: <strong>{clientName}</strong> — connect to Epic via SMART Backend Services (FHIR R4). Pulls{" "}
-        <span className="mono">Patient</span>, <span className="mono">Coverage</span>, and{" "}
-        <span className="mono">Account (Premium Billing)</span> into Credit Balance accounts.
-        Register your app at{" "}
+        Facility: <strong>{clientName}</strong> — SMART Backend Services (FHIR R4).
+        Register at{" "}
         <a href="https://fhir.epic.com" target="_blank" rel="noreferrer">
           fhir.epic.com
-        </a>{" "}
-        and paste your NONPROD client ID + RSA private key below.
+        </a>
+        . Set Epic <strong>Non-Production JWK Set URL</strong> to:
+      </p>
+      <p className="mono" style={{ wordBreak: "break-all" }}>
+        {jwksUrl}
       </p>
 
       {error && <div className="error">{error}</div>}
@@ -231,6 +273,16 @@ export function AdminEpicPage() {
       <div className="grid cols-2">
         <form className="card stack" onSubmit={saveConfig}>
           <h2>Connection</h2>
+          <div className="btn-row">
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              onClick={fillSandboxKey}
+            >
+              Fill sandbox key + URLs
+            </button>
+          </div>
           <label className="field" style={{ flexDirection: "row", gap: "0.5rem" }}>
             <input
               type="checkbox"
